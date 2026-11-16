@@ -26,85 +26,28 @@ Criterios: **Dominio del tema · Momento memorable · Caso real de Cobija · Cla
 
 ---
 
-## Archivos
+## Cómo está montado
 
-| Archivo | Dónde va |
+| Pieza | Dónde está |
 |---|---|
-| `index.html` | **GitHub** (es la página web) |
-| `Code.gs` | **Google Apps Script**. ⚠️ **No lo subas a GitHub**: contiene los RU de los estudiantes. |
-
-Si abres `index.html` sin configurarlo, funciona en **modo demostración** (RU 1001 a 1028, código `2026`, PIN docente `1234`), con datos guardados solo en ese navegador.
-
----
-
-## Instalación (unos 15 minutos, una sola vez)
-
-### 1. Crea la hoja de cálculo
-1. Entra a [sheets.google.com](https://sheets.google.com) y crea una hoja nueva. Ponle de nombre **Copa Salvando el Semestre – ICOM261**.
-
-### 2. Pega el código
-1. En la hoja: **Extensiones → Apps Script**.
-2. Borra todo lo que aparece y pega el contenido completo de `Code.gs`.
-3. En la línea `const PIN_DOCENTE = 'CAMBIA-ESTE-PIN';` escribe tu propio PIN (lo usarás en el panel del docente).
-4. Guarda (ícono del disquete).
-
-### 3. Instala las hojas
-1. Arriba, en la lista de funciones, elige **instalar** y toca **▶ Ejecutar**.
-2. Google pedirá permisos: **Revisar permisos → tu cuenta → Configuración avanzada → Ir a … (no seguro) → Permitir**. Es tu propio script.
-3. Vuelve a la hoja: verás las pestañas **Estudiantes, Evaluaciones, Resultados, Accesos y Control**.
-
-### 4. Publica el sistema
-1. En Apps Script: **Implementar → Nueva implementación**.
-2. Tipo (ícono de engranaje): **Aplicación web**.
-3. **Ejecutar como:** Yo. **Quién tiene acceso:** Cualquier usuario.
-4. **Implementar** y copia la **URL de la aplicación web** (termina en `/exec`).
-
-### 5. Conecta la página
-1. Abre `index.html` con el Bloc de notas (o en GitHub con el lápiz ✏️).
-2. Busca la línea `const API_URL = '';` y pega tu URL entre las comillas:
-   `const API_URL = 'https://script.google.com/macros/s/XXXX/exec';`
-3. Guarda.
-
-### 6. Súbelo a GitHub
-1. En GitHub crea un repositorio **público**, por ejemplo `copases`.
-2. **Add file → Upload files** → sube `index.html` (y este `README.md` si quieres) → **Commit changes**.
-3. **Settings → Pages → Source: Deploy from a branch → main / (root) → Save**.
-4. En uno o dos minutos tu página estará en:
-   `https://TU-USUARIO.github.io/copases/`
-
-### 7. Prueba antes de la clase
-1. Abre la página agregando `#docente` al final y entra con tu PIN.
-2. Toca **Generar** y **Guardar** para crear un código de sala.
-3. Abre la página normal en tu celular, entra con un RU de prueba y el código.
-4. En el panel, pon a alguien **En escena** y evalúalo desde el celular.
-5. Revisa que la evaluación aparezca en la hoja **Evaluaciones**. Después **borra esa fila** para empezar limpio.
+| Página web (`index.html`) | Este repositorio, publicado en **https://jismartbrands.github.io/copases/** |
+| Datos | Hoja de Google **COPA SALVANDO EL SEMESTRE - BASE ICOM261** (en el Drive del docente): Estudiantes, Evaluaciones, Resultados, Accesos y Control |
+| Lógica | Proyecto de Apps Script **Copa Salvando el Semestre - Sistema**, publicado como aplicación web. Su código no se sube aquí porque contiene los RU. |
 
 ---
 
-## Uso en clase
+## El día de la exposición
 
-**Página del docente:** `https://TU-USUARIO.github.io/copases/#docente`
-
-1. **Antes de empezar:** elige la sesión (**Mié 18 · Sesión 1** o **Jue 19 · Sesión 2**), genera un **código nuevo** y toca **Abrir proyector**. El proyector muestra el **QR** de la página, el código y quién está en escena.
-2. **Cada exposición:** toca **Siguiente expositor**. Los celulares se actualizan solos en pocos segundos y el expositor queda abierto para evaluar. El panel muestra cuántas evaluaciones recibió de las esperadas.
-3. **Si alguien falta:** toca **Ausente** en su fila (nota 0). Si llega, toca **Presente**.
-4. **Al terminar la sesión:** **Cerrar evaluaciones de la sesión** (hay que tocar dos veces).
-5. **Notas:** pestaña **Resultados → Descargar Excel**. El archivo trae la hoja **Notas finales** y la hoja **Detalle de evaluaciones**, con lo que escribió cada evaluador.
-
-También puedes descargar desde Google Sheets: hoja **Resultados → Archivo → Descargar → Microsoft Excel (.xlsx)**.
+1. Abre **https://jismartbrands.github.io/copases/#docente** en la computadora del aula y entra con tu PIN.
+2. Elige la sesión (miércoles 18 o jueves 19) y guarda un **código de sala** nuevo (toca *Generar* y luego *Guardar*).
+3. Toca **Proyector**: muestra el QR, el código y el reloj de 5 minutos.
+4. Los estudiantes escanean el QR, escriben su RU y el código, y confirman su nombre («¿Eres tú?»).
+5. Toca **Siguiente expositor**: aparece en todos los celulares y arranca el reloj de 5 minutos. *Reiniciar 5 min* lo vuelve a poner en cero.
+6. Si alguien falta, toca **Ausente** (nota 0). Al terminar, **Cerrar evaluaciones de la sesión**.
+7. En **Resultados** ves el podio y las notas, y descargas el **Excel**. Las mismas notas quedan en la hoja **Resultados** de Google Sheets.
 
 ---
 
-## Preguntas frecuentes
+## Si cambias el código de Apps Script
 
-**¿Cambio el código cada sesión?** Sí. Un código nuevo cada día evita que alguien evalúe sin estar en el aula. Quien tenga el código viejo deberá volver a entrar.
-
-**Un estudiante se equivocó en su evaluación.** Mientras el expositor siga abierto, puede volver a evaluarlo: la nueva evaluación reemplaza a la anterior.
-
-**Quiero anular una evaluación sin sustento.** Borra esa fila en la hoja **Evaluaciones**. La nota se recalcula sola.
-
-**Cambié algo en `Code.gs`.** En Apps Script: **Implementar → Administrar implementaciones → ✏️ Editar → Versión: Nueva versión → Implementar**. La URL no cambia.
-
-**La página dice «No hay conexión con el sistema».** Revisa que la URL pegada en `index.html` termine en `/exec` y que la implementación tenga acceso para **Cualquier usuario**.
-
-**¿Los RU quedan públicos?** No. La página de GitHub no contiene RU: los nombres y RU solo están en tu hoja de Google y en tu Apps Script.
+En el editor de Apps Script: **Implementar → Administrar implementaciones → Editar (lápiz) → Versión: Nueva versión → Implementar**. Así la URL `/exec` no cambia y la web sigue conectada.
