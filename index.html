@@ -474,6 +474,13 @@ body.con-medidor .toast{bottom:calc(96px + var(--pie))}
           <div class="kpi"><b id="nPresentes">0</b><span class="ayuda">estudiantes entraron</span></div>
           <details style="margin-top:8px"><summary class="ayuda" style="cursor:pointer">Ver quiénes entraron</summary><p id="listaPresentes" class="ayuda" style="margin-top:6px"></p></details>
         </div>
+        <div class="card" style="border-color:var(--vino-1)">
+          <h3>Borrar pruebas</h3>
+          <p class="ayuda" style="margin-top:4px">Antes de la sesión real: borra <b>todas</b> las evaluaciones y la lista de presentes, y deja a todos en «Pendiente». El código de sala se mantiene.</p>
+          <div class="fila-btn"><input class="ent codigo" id="inBorrar" maxlength="6" placeholder="BORRAR" aria-label="Escribe BORRAR para confirmar" style="flex:1;min-width:110px;margin:0;font-size:1rem;padding:10px;letter-spacing:.12em">
+            <button class="btn btn-vino btn-mini" id="btnBorrar">Borrar todo</button></div>
+          <p class="ayuda" style="margin-top:6px;font-size:.78rem">Escribe BORRAR y toca el botón. No se puede deshacer.</p>
+        </div>
       </div>
       <div class="col">
         <div class="card">
@@ -680,6 +687,7 @@ function crearDemo(){
         else if(op==='reiniciar'){const s=db.est.find(x=>x.id===Number(b.id));if(!s)throw'Expositor no válido.';s.estado='pendiente';if(db.actual===s.id){db.actual=0;db.inicio=0;}db.eva=db.eva.filter(x=>x.id!==s.id);}
         else if(op==='cerrarSesion'){db.est.forEach(s=>{if(s.sesion===Number(b.sesion)&&s.estado==='abierto')s.estado='cerrado';});db.actual=0;db.inicio=0;}
         else if(op==='reiniciarDemo'){db=base();}
+        else if(op==='limpiarTodo'){if(String(b.confirma||'').toUpperCase()!=='BORRAR')throw'Escribe BORRAR para confirmar.';db.eva=[];db.acc=[];db.est.forEach(s=>s.estado='pendiente');db.actual=0;db.inicio=0;}
         else if(op!=='panel')throw'Operación no válida.';
         return panel();}
       throw'Acción no válida.';})
@@ -959,6 +967,11 @@ $('#btnSiguiente').addEventListener('click',()=>{
   const desde=ses.findIndex(s=>s.id===c.actual);
   const sig=ses.slice(desde+1).find(s=>s.estado==='pendiente')||ses.find(s=>s.estado==='pendiente');
   if(!sig)return toast('Ya expusieron todos los de esta sesión.');adm('actual',{id:sig.id}).then(ok=>ok&&toast('🎤 En escena: '+titulo(sig.nombre)));});
+$('#btnBorrar').addEventListener('click',async()=>{
+  const v=$('#inBorrar').value.trim().toUpperCase();
+  if(v!=='BORRAR'){$('#inBorrar').focus();return toast('Escribe BORRAR en el recuadro para confirmar.',true);}
+  const b=$('#btnBorrar');ocupado(b,'Borrando…');const ok=await adm('limpiarTodo',{confirma:v});libre(b);
+  if(ok){$('#inBorrar').value='';toast('🧹 Pruebas borradas: todo quedó en cero.');}});
 $('#btnReloj').addEventListener('click',async()=>{if(!D.p||!D.p.control.actual)return toast('Primero pon a alguien en escena.',true);if(await adm('reloj'))toast('Reloj reiniciado: 5 minutos.');});
 $('#btnCerrarSesion').addEventListener('click',async()=>{
   const b=$('#btnCerrarSesion');
