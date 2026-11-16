@@ -247,6 +247,9 @@ textarea.ent{min-height:96px;resize:vertical;font-size:1rem;line-height:1.45}
 .capa .card .grande{font-family:var(--display);font-size:3.2rem;font-weight:800;line-height:1;color:var(--vino);margin:8px 0 2px}
 .capa .icono{width:72px;height:72px;margin:0 auto 10px;border-radius:24px;display:grid;place-items:center;background:var(--azul-05);font-size:2.2rem}
 .capa .pila{display:grid;gap:8px;margin-top:18px}
+.estado-envio{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;font-size:.86rem;font-weight:700;color:var(--azul-7);min-height:1.3em}
+.estado-envio .cargando{width:15px;height:15px;border:3px solid var(--azul-1);border-top-color:var(--azul-7)}
+.estado-envio.ok{color:var(--ok)} .estado-envio.error{color:var(--vino)}
 .tarjeta-yo{background:var(--azul-05);border-radius:16px;padding:14px;margin-top:14px;text-align:left}
 .tarjeta-yo b{display:block;font-family:var(--display);color:var(--azul-9);font-size:1.15rem;line-height:1.2}
 .tarjeta-yo span{display:block;font-size:.86rem;color:var(--plomo)}
@@ -559,7 +562,9 @@ body.con-medidor .toast{bottom:calc(96px + var(--pie))}
     <p class="ayuda" id="okQuien" style="margin-top:4px"></p>
     <div class="grande" id="okNota"></div>
     <p id="okMision" style="font-weight:700;color:var(--azul-9);margin-top:6px"></p>
+    <p class="estado-envio" id="okEstado" role="status"></p>
     <button class="btn btn-vino btn-bloque" id="btnOk">Volver a la agenda</button>
+    <button class="btn btn-borde btn-bloque oculto" id="btnReenviar" style="margin-top:8px">Volver a enviar</button>
   </div>
 </div>
 <canvas id="confeti" class="oculto"></canvas>
@@ -624,14 +629,18 @@ function pintarReloj(el,inicio,claro){
 }
 
 /* ===================== Conexión ===================== */
-async function pedir(fn){
-  const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),25000);
-  try{const r=await fn(ctrl.signal);ajustarHora(r);return r;}
-  catch(e){return{ok:false,error:'No hay conexión con el sistema. Revisa tu internet e inténtalo de nuevo.'};}
-  finally{clearTimeout(to);}
+/* Si la señal falla, reintenta solo (hasta 3 intentos) antes de mostrar un error */
+async function pedir(fn,intentos=3){
+  for(let i=0;i<intentos;i++){
+    const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),20000);
+    try{const r=await fn(ctrl.signal);ajustarHora(r);return r;}
+    catch(e){if(i<intentos-1)await new Promise(ok=>setTimeout(ok,600+Math.random()*900*(i+1)));}
+    finally{clearTimeout(to);}
+  }
+  return{ok:false,red:true,error:'No hay conexión con el sistema. Revisa tu internet e inténtalo de nuevo.'};
 }
 const API=API_URL?{
-  get:p=>pedir(s=>fetch(API_URL+'?'+new URLSearchParams(p),{signal:s}).then(r=>r.json())),
+  get:p=>pedir(s=>fetch(API_URL+'?'+new URLSearchParams(Object.assign({},p,{_:Date.now()})),{signal:s,cache:'no-store'}).then(r=>r.json())),
   post:b=>pedir(s=>fetch(API_URL,{method:'POST',body:JSON.stringify(b),signal:s}).then(r=>r.json()))
 }:crearDemo();
 
@@ -695,9 +704,11 @@ function crearDemo(){
 }
 
 /* ===================== ESTUDIANTE ===================== */
-const E={yo:null,ru:'',codigo:'',lista:[],mios:new Set(),actual:0,sesion:1,inicio:0,recibidas:0,reglas:{minPorque:15,minEntendio:25},ev:null,paso:0,sondeo:null,borradores:{},filtro:'todos'};
+const E={envios:{},okId:null,yo:null,ru:'',codigo:'',lista:[],mios:new Set(),actual:0,sesion:1,inicio:0,recibidas:0,reglas:{minPorque:15,minEntendio:25},ev:null,paso:0,sondeo:null,borradores:{},filtro:'todos'};
 
 async function cargarLista(){const r=await API.get({action:'init'});if(r.ok){E.lista=r.presentadores;E.reglas=r.reglas||E.reglas;E.actual=r.actual;E.sesion=r.sesion;E.inicio=r.inicio||0;}return r;}
+// La lista se pide apenas abre la página, mientras el estudiante escribe su RU.
+function precargar(){if(!E.listaP)E.listaP=cargarLista().then(r=>{if(!r.ok)E.listaP=null;return r;});return E.listaP;}
 
 $('#inRU').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'');});
 $('#inCodigo').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase().replace(/\s/g,'');});
@@ -709,7 +720,7 @@ $('#fIngreso').addEventListener('submit',async ev=>{
   const b=$('#btnEntrar');ocupado(b,'Buscando…');
   const r=await API.post({action:'login',ru,codigo,solo:true});libre(b);
   if(!r.ok)return toast(r.error,true);
-  E.pend={ru,codigo};
+  E.pend={ru,codigo,yo:r.yo};precargar();
   $('#yoNombre').textContent=titulo(r.yo.nombre);
   $('#yoDatos').textContent='Grupo '+r.yo.grupo+(r.yo.tema?' · Tu tema: '+r.yo.tema:'');
   document.querySelectorAll('.toast').forEach(x=>x.remove());$('#capaYo').classList.remove('oculto');$('#btnSoyYo').focus();
@@ -717,13 +728,19 @@ $('#fIngreso').addEventListener('submit',async ev=>{
 $('#btnNoSoy').addEventListener('click',()=>{$('#capaYo').classList.add('oculto');$('#inRU').select();});
 $('#btnSoyYo').addEventListener('click',async()=>{
   const b=$('#btnSoyYo');ocupado(b,'Entrando…');
-  const {ru,codigo}=E.pend;const r=await API.post({action:'login',ru,codigo});libre(b);
-  if(!r.ok){$('#capaYo').classList.add('oculto');return toast(r.error,true);}
+  const {ru,codigo,yo}=E.pend;
+  const lista=await precargar();libre(b);
+  if(!lista.ok){$('#capaYo').classList.add('oculto');E.listaP=null;return toast(lista.error,true);}
   $('#capaYo').classList.add('oculto');
-  E.yo=r.yo;E.ru=ru;E.codigo=codigo;E.mios=new Set(r.mios);E.actual=r.actual;
-  guarda.set('copa_sesion',{ru,codigo,yo:r.yo,mios:r.mios});
-  await cargarLista();abrirEscenario();toast('¡Bienvenido a la Copa, '+pila(r.yo.nombre)+'!');
+  E.yo=yo;E.ru=ru;E.codigo=codigo;E.mios=new Set((guarda.get('copa_mios_'+ru)||[]));
+  guarda.set('copa_sesion',{ru,codigo,yo,mios:[...E.mios]});
+  abrirEscenario();toast('¡Bienvenido a la Copa, '+pila(yo.nombre)+'!');
+  // Registro de asistencia en segundo plano
+  API.post({action:'login',ru,codigo}).then(r=>{
+    if(!r.ok){if(!r.red){salir();toast(r.error,true);}return;}
+    E.mios=new Set([...E.mios,...r.mios]);guardarMios();if(!$('#vEscenario').classList.contains('oculto'))pintarEscenario();});
 });
+function guardarMios(){const ss=guarda.get('copa_sesion');if(ss){ss.mios=[...E.mios];guarda.set('copa_sesion',ss);}guarda.set('copa_mios_'+E.ru,[...E.mios]);}
 
 function abrirEscenario(){
   vista('vEscenario');$('#chipYo').classList.remove('oculto');$('#yoIni').textContent=iniciales(E.yo.nombre);
@@ -758,7 +775,9 @@ function pintarEscenario(){
 function pintarPulso(){const p=$('#escPulso');if(!p)return;const n=E.recibidas||0;
   p.textContent=n?(n===1?'1 compañero ya evaluó':n+' compañeros ya evaluaron'):'Sé el primero en evaluar';}
 function estadoFila(s){
-  const propio=s.grupo===E.yo.grupo,hecho=E.mios.has(s.id);
+  const propio=s.grupo===E.yo.grupo,hecho=E.mios.has(s.id),env=E.envios[s.id];
+  if(env&&env.estado==='enviando')return{chip:'⏳ Guardando',cls:'pendiente',ok:false};
+  if(env&&env.estado==='error')return{chip:'⚠ Reenviar',cls:'ausente',ok:true};
   if(propio)return{chip:'Tu grupo',cls:'mio',ok:false};
   if(s.estado==='ausente')return{chip:'Ausente',cls:'ausente',ok:false};
   if(hecho)return{chip:'✓ Evaluado',cls:'hecho',ok:s.estado==='abierto',hecho:true};
@@ -784,11 +803,11 @@ $('#filtros').addEventListener('click',e=>{const b=e.target.closest('button');if
   $('#filtros').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));pintarLista();});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-evaluar]');if(b)abrirEvaluacion(Number(b.dataset.evaluar));});
 
-function iniciarSondeo(){clearInterval(E.sondeo);E.sondeo=setInterval(sondear,8000);sondear();}
+function iniciarSondeo(){clearTimeout(E.sondeo);const ciclo=async()=>{await sondear();E.sondeo=setTimeout(ciclo,5500+Math.random()*2000);};E.sondeo=setTimeout(ciclo,400+Math.random()*1200);}
 async function sondear(){
   if(!E.yo||document.hidden)return;
   const r=await API.get({action:'estado',ru:E.ru,codigo:E.codigo});
-  if(!r.ok){if(/código|RU/.test(r.error)){salir();toast(r.error,true);}return;}
+  if(!r.ok){if(!r.red&&/código|RU/.test(r.error)){salir();toast(r.error,true);}return;}
   const antes=E.actual;E.actual=r.actual;E.sesion=r.sesion||E.sesion;E.inicio=r.inicio||0;E.recibidas=r.recibidas||0;
   const m={};r.estados.forEach(x=>m[x.id]=x.estado);E.lista.forEach(s=>{if(m[s.id])s.estado=m[s.id];});
   if(E.actual&&E.actual!==antes){const a=E.lista.find(s=>s.id===E.actual);if(a){toast('🎤 Ahora expone '+corto(a.nombre));try{navigator.vibrate&&navigator.vibrate(120)}catch(x){}}}
@@ -800,6 +819,7 @@ function abrirEvaluacion(id){
   const s=E.lista.find(x=>x.id===id);if(!s)return;
   if(s.grupo===E.yo.grupo)return toast('No puedes evaluar a tu propio grupo.',true);
   const previo=guarda.get('copa_ev_'+E.ru+'_'+id);
+  if(E.envios[id]&&E.envios[id].estado==='error')E.borradores[id]=JSON.parse(JSON.stringify(E.envios[id].ev));
   E.ev=E.borradores[id]||{id,c:previo?previo.c.slice():[0,0,0,0,0],porque:previo?previo.porque:'',entendio:previo?previo.entendio:''};
   $('#evNombre').textContent=titulo(s.nombre);$('#evTema').textContent=s.tema+' · Grupo '+s.grupo;
   $('#txPorque').value=E.ev.porque;$('#txEntendio').value=E.ev.entendio;
@@ -863,23 +883,41 @@ function actualizarMedidor(){
   if(E.paso===5)pintarResumen();
   E.borradores[E.ev.id]=E.ev;
 }
-$('#btnEnviar').addEventListener('click',async()=>{
-  const b=$('#btnEnviar');ocupado(b,'Enviando…');
-  const ev=E.ev;const r=await API.post({action:'evaluar',ru:E.ru,codigo:E.codigo,id:ev.id,c:ev.c,porque:ev.porque.trim(),entendio:ev.entendio.trim()});
-  libre(b);
-  if(!r.ok)return toast(r.error,true);
-  b.disabled=true;
-  E.mios=new Set(r.mios);guarda.set('copa_ev_'+E.ru+'_'+ev.id,{c:ev.c,porque:ev.porque,entendio:ev.entendio});delete E.borradores[ev.id];
-  const s=E.lista.find(x=>x.id===ev.id);const evs=evaluables(),hechos=evs.filter(x=>E.mios.has(x.id)).length;
-  $('#okQuien').textContent=(r.reemplazo?'Actualizaste tu nota para ':'Tu nota para ')+titulo(s.nombre);
-  $('#okNota').textContent=fmt(r.nota)+' / 5';
+$('#btnEnviar').addEventListener('click',()=>{
+  const ev=JSON.parse(JSON.stringify(E.ev));ev.porque=ev.porque.trim();ev.entendio=ev.entendio.trim();
+  const s=E.lista.find(x=>x.id===ev.id);const suma=ev.c.reduce((a,x)=>a+x,0),nota=Math.round(suma/3*100)/100;
+  const yaEstaba=E.mios.has(ev.id);
+  E.envios[ev.id]={ev,estado:'enviando'};$('#btnEnviar').disabled=true;
+  $('#okQuien').textContent=(yaEstaba?'Actualizaste tu nota para ':'Tu nota para ')+titulo(s.nombre);
+  $('#okNota').textContent=fmt(nota)+' / 5';
+  const evs=evaluables(),hechos=evs.filter(x=>E.mios.has(x.id)||x.id===ev.id).length;
   $('#okMision').textContent=hechos>=evs.length?'🕵️ ¡Evaluaste a todos! Eres evaluador estrella.':`Llevas ${hechos} de ${evs.length}. ¡Sigue así!`;
+  E.okId=ev.id;pintarEstadoEnvio();
   $('#capaOk').classList.remove('oculto');$('#btnOk').focus();confeti();
-  const ss=guarda.get('copa_sesion');if(ss){ss.mios=[...E.mios];guarda.set('copa_sesion',ss);}
+  enviarEvaluacion(ev.id);
 });
+/* Envía en segundo plano; si falla la señal, reintenta solo. Si el sistema la rechaza, avisa. */
+async function enviarEvaluacion(id){
+  const it=E.envios[id];if(!it)return;it.estado='enviando';pintarEstadoEnvio();if(!$('#vEscenario').classList.contains('oculto'))pintarLista();
+  const ev=it.ev;
+  const r=await API.post({action:'evaluar',ru:E.ru,codigo:E.codigo,id:ev.id,c:ev.c,porque:ev.porque,entendio:ev.entendio});
+  if(r.ok){
+    delete E.envios[id];E.mios=new Set(r.mios);guardarMios();
+    guarda.set('copa_ev_'+E.ru+'_'+id,{c:ev.c,porque:ev.porque,entendio:ev.entendio});delete E.borradores[id];
+    if(E.okId===id){E.okGuardada=true;}
+  }else{it.estado='error';it.error=r.error;if(E.okId!==id||$('#capaOk').classList.contains('oculto'))toast('⚠ No se guardó tu evaluación: '+r.error,true);}
+  pintarEstadoEnvio();if(!$('#vEscenario').classList.contains('oculto'))pintarEscenario();
+}
+function pintarEstadoEnvio(){
+  const el=$('#okEstado');if(!el||E.okId==null)return;const it=E.envios[E.okId];
+  if(!it){el.className='estado-envio ok';el.textContent='✓ Guardada en el sistema';$('#btnReenviar').classList.add('oculto');return;}
+  if(it.estado==='error'){el.className='estado-envio error';el.textContent='⚠ No se guardó: '+it.error;$('#btnReenviar').classList.remove('oculto');return;}
+  el.className='estado-envio';el.innerHTML='<span class="cargando"></span>Guardando en el sistema…';$('#btnReenviar').classList.add('oculto');
+}
+$('#btnReenviar').addEventListener('click',()=>{if(E.okId!=null)enviarEvaluacion(E.okId);});
 $('#btnOk').addEventListener('click',()=>{$('#capaOk').classList.add('oculto');abrirEscenario();});
 $('#btnVolver').addEventListener('click',abrirEscenario);
-function salir(){clearInterval(E.sondeo);E.yo=null;guarda.del('copa_sesion');$('#chipYo').classList.add('oculto');vista('vIngreso');}
+function salir(){clearTimeout(E.sondeo);E.yo=null;guarda.del('copa_sesion');$('#chipYo').classList.add('oculto');vista('vIngreso');}
 $('#btnSalir').addEventListener('click',()=>{if(location.hash==='#docente'){guarda.del('copa_pin');location.reload();}else salir();});
 
 /* ----- Confeti con los colores UAP (sin librerías) ----- */
@@ -966,7 +1004,9 @@ $('#btnSiguiente').addEventListener('click',()=>{
   const c=D.p.control,ses=D.p.resultados.filter(s=>s.sesion===c.sesion);
   const desde=ses.findIndex(s=>s.id===c.actual);
   const sig=ses.slice(desde+1).find(s=>s.estado==='pendiente')||ses.find(s=>s.estado==='pendiente');
-  if(!sig)return toast('Ya expusieron todos los de esta sesión.');adm('actual',{id:sig.id}).then(ok=>ok&&toast('🎤 En escena: '+titulo(sig.nombre)));});
+  if(!sig)return toast('Ya expusieron todos los de esta sesión.');
+  c.actual=sig.id;c.inicio=Date.now()+DESFASE;sig.estado='abierto';pintarDocente();toast('🎤 En escena: '+titulo(sig.nombre));
+  adm('actual',{id:sig.id});});
 $('#btnBorrar').addEventListener('click',async()=>{
   const v=$('#inBorrar').value.trim().toUpperCase();
   if(v!=='BORRAR'){$('#inBorrar').focus();return toast('Escribe BORRAR en el recuadro para confirmar.',true);}
@@ -1042,9 +1082,10 @@ $('#btnExcel').addEventListener('click',async()=>{
   if(location.hash==='#docente'){
     const pin=guarda.get('copa_pin');if(pin){D.pin=pin;if(await adm('panel'))return entrarDocente();}
     return vista('vDocIngreso');}
+  if(location.hash!=='#docente')precargar();
   const s=guarda.get('copa_sesion');
   if(s){E.ru=s.ru;E.codigo=s.codigo;E.yo=s.yo;E.mios=new Set(s.mios||[]);
-    const r=await cargarLista();const v=await API.get({action:'estado',ru:E.ru,codigo:E.codigo});
+    const [r,v]=await Promise.all([precargar(),API.get({action:'estado',ru:E.ru,codigo:E.codigo})]);
     if(r.ok&&v.ok){E.actual=v.actual;E.sesion=v.sesion||E.sesion;E.inicio=v.inicio||0;E.recibidas=v.recibidas||0;return abrirEscenario();}
     guarda.del('copa_sesion');}
   vista('vIngreso');
