@@ -138,7 +138,7 @@ textarea.ent{min-height:96px;resize:vertical;font-size:1rem;line-height:1.45}
 .reloj svg{width:100%;height:100%;transform:rotate(-90deg)}
 .reloj .t{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-family:var(--display);font-weight:800;font-size:1.02rem;line-height:1}
 .reloj .t small{display:block;font-family:var(--texto);font-weight:700;font-size:.56rem;opacity:.75;margin-top:3px;letter-spacing:.02em}
-.reloj.fin .t{color:#FFB4AE}
+.reloj.fin .t{color:#A8E0C0}
 .espera{text-align:center;padding:16px 6px 6px;position:relative}
 .espera .onda{width:74px;height:74px;margin:0 auto 10px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.1);animation:flota 3s ease-in-out infinite}
 .espera .onda svg{width:44px;height:44px}
@@ -281,7 +281,7 @@ body.con-medidor .toast{bottom:calc(96px + var(--pie))}
 .escena-doc .reloj{width:108px;height:108px}
 .escena-doc .reloj .t{color:var(--azul-9);font-size:1.4rem}
 .escena-doc .reloj .t small{font-size:.62rem}
-.escena-doc .reloj.fin .t{color:var(--vino)}
+.escena-doc .reloj.fin .t{color:var(--ok)}
 .prog{height:10px;border-radius:9px;background:var(--fondo);overflow:hidden;margin-top:12px}
 .prog i{display:block;height:100%;width:0;border-radius:9px;background:linear-gradient(90deg,var(--azul-5),var(--azul));transition:width .5s}
 .orden{display:grid;gap:8px}
@@ -494,9 +494,11 @@ body.con-medidor .toast{bottom:calc(96px + var(--pie))}
           <div class="prog"><i id="docProg"></i></div>
           <p class="ayuda" id="docCuantas" style="margin-top:6px"></p>
           <div class="fila-btn">
-            <button class="btn btn-vino" id="btnSiguiente" style="flex:2;min-width:200px"><svg aria-hidden="true"><use href="#i-mic"/></svg>Siguiente expositor</button>
-            <button class="btn btn-borde" id="btnReloj" style="flex:1;min-width:150px">Reiniciar 5 min</button>
+            <button class="btn btn-azul oculto" id="btnTerminar" style="flex:1;min-width:190px">⏹ Terminar exposición</button>
+            <button class="btn btn-vino" id="btnSiguiente" style="flex:1;min-width:190px"><svg aria-hidden="true"><use href="#i-mic"/></svg>Siguiente expositor</button>
           </div>
+          <p class="ayuda" id="ayudaCrono" style="margin-top:8px;font-size:.82rem">El cronómetro corre sin límite. Toca «Terminar exposición» cuando acabe de hablar: su tiempo queda guardado y el curso puede seguir evaluándolo.</p>
+          <button class="btn btn-borde btn-bloque btn-mini" id="btnReloj" style="margin-top:8px">↺ Volver el cronómetro a 0:00</button>
           <button class="btn btn-borde btn-bloque oculto" id="btnDeshacer" style="margin-top:10px">Deshacer: sacar de escena y volver a pendiente</button>
           <button class="btn btn-borde btn-bloque" id="btnCerrarSesion" style="margin-top:10px">Cerrar evaluaciones de la sesión</button>
         </div>
@@ -571,7 +573,6 @@ body.con-medidor .toast{bottom:calc(96px + var(--pie))}
 
 <script>
 /* ===================== Datos fijos ===================== */
-const DURACION=300; // 5 minutos por expositor
 const NIVELES={
   1:{e:'🆘',n:'Pide rescate',s:'No suficiente'},
   2:{e:'🛟',n:'Se salva',s:'Suficiente'},
@@ -583,7 +584,7 @@ const CRITERIOS=[
    d:{1:'No hubo apertura ni actividad.',2:'Abrió bien o hizo la actividad, pero participamos poco.',3:'Abrió con un dato o una pregunta que atrapó y todos participamos.'}},
   {ico:'📍',t:'Caso real de Cobija',q:'¿Mostró un ejemplo real con su evidencia (captura, foto o fuente)?',
    d:{1:'Sin ejemplo, o un ejemplo inventado.',2:'Ejemplo real, pero sin evidencia clara.',3:'Caso real con su evidencia, bien explicado.'}},
-  {ico:'⏱️',t:'Claridad y tiempo',q:'¿Se entendió, usó bien sus 5 minutos y cerró con su frase?',
+  {ico:'⏱️',t:'Claridad y tiempo',q:'¿Se entendió, aprovechó bien su tiempo y cerró con su frase?',
    d:{1:'Confuso, muy corto o se pasó mucho.',2:'Se entendió, pero falló el tiempo o el cierre.',3:'Claro, a tiempo y cerró con su frase.'}},
   {ico:'🎯',t:'Responde preguntas',q:'¿Respondió bien la pregunta del docente o del curso?',
    d:{1:'No supo responder.',2:'Respondió con dudas.',3:'Respondió bien y con seguridad.'}}];
@@ -611,21 +612,20 @@ function etiquetaNota(n){if(n>=4.5)return'🏆 ¡Salvó el semestre!';if(n>=3.5)
 function ocupado(b,txt){b.disabled=true;b.dataset.txt=b.innerHTML;b.innerHTML='<span class="cargando"></span>'+txt;}
 function libre(b){b.disabled=false;if(b.dataset.txt)b.innerHTML=b.dataset.txt;}
 
-/* Reloj de 5 minutos compartido: el servidor guarda la hora de inicio */
+/* Cronómetro compartido sin límite: el servidor guarda la hora de inicio y, al terminar, los segundos que expuso */
 let DESFASE=0; // diferencia entre el reloj del servidor y el de este equipo
 function ajustarHora(r){if(r&&r.ahora)DESFASE=r.ahora-Date.now();}
-function restante(inicio){if(!inicio)return null;return DURACION-Math.floor((Date.now()+DESFASE-inicio)/1000);}
-function pintarReloj(el,inicio,claro){
-  if(!el)return;const s=restante(inicio);
+function transcurrido(inicio){return inicio?Math.max(0,Math.floor((Date.now()+DESFASE-inicio)/1000)):null;}
+const mmss=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+function pintarReloj(el,inicio,claro,duro){
+  if(!el)return;const corre=!!inicio,s=corre?transcurrido(inicio):(duro!=null?duro:null);
   if(s==null){el.innerHTML='';el.classList.add('oculto');return;}
-  el.classList.remove('oculto');
-  const L=2*Math.PI*44,frac=Math.max(0,Math.min(1,s/DURACION)),fin=s<=0,poco=s<=60;
-  const m=Math.floor(Math.abs(s)/60),ss=String(Math.abs(s)%60).padStart(2,'0');
-  const fondo=claro?'#E6EAF1':'rgba(255,255,255,.16)',col=fin?'#E26A5F':poco?(claro?'#9A6200':'#F4C26B'):(claro?'#1F3864':'#FFFFFF');
-  el.classList.toggle('fin',fin);
+  el.classList.remove('oculto');el.classList.toggle('fin',!corre);
+  const L=2*Math.PI*44,frac=corre?(s%60)/60:1;
+  const fondo=claro?'#E6EAF1':'rgba(255,255,255,.16)',col=corre?(claro?'#1F3864':'#FFFFFF'):(claro?'#1E7A4C':'#A8E0C0');
   el.innerHTML=`<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="${fondo}" stroke-width="9"/>
     <circle cx="50" cy="50" r="44" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${frac*L} ${L}"/></svg>
-    <div class="t" role="timer" aria-label="Tiempo restante">${fin?'+'+m+':'+ss:m+':'+ss}<small>${fin?'pregunta':'quedan'}</small></div>`;
+    <div class="t" role="timer" aria-label="${corre?'Tiempo de exposición':'Tiempo que expuso'}">${mmss(s)}<small>${corre?'expone':'expuso'}</small></div>`;
 }
 
 /* ===================== Conexión ===================== */
@@ -657,18 +657,20 @@ function crearDemo(){
     if(String(cod||'').trim().toUpperCase()!==db.codigo)throw'El código de sala no es correcto. Míralo en el proyector.';
     const yo=db.est.find(s=>s.ru===String(ru||'').trim());if(!yo)throw'No encontramos ese RU en la lista del curso.';return yo;};
   const mios=ru=>db.eva.filter(x=>x.ru===ru).map(x=>x.id);
+  const durAct=()=>{const a=db.est.find(x=>x.id===db.actual);return a&&a.tiempo!=null?a.tiempo:null;};
+  const guardarT=()=>{if(db.actual&&db.inicio){const a=db.est.find(x=>x.id===db.actual);if(a)a.tiempo=Math.round((Date.now()-db.inicio)/1000);db.inicio=0;}};
   const panel=()=>({control:{codigo:db.codigo,actual:db.actual,sesion:db.sesion,inicio:db.inicio},ahora:Date.now(),
     presentes:db.acc.filter(a=>a.dia===hoy()),
     resultados:db.est.map(s=>{const m=db.eva.filter(x=>x.id===s.id),n=m.length;
       return{id:s.id,ru:s.ru,nombre:s.nombre,grupo:s.grupo,parte:s.parte,tema:s.tema,sesion:s.sesion,estado:s.estado,n,
         nota:s.estado==='ausente'?0:(n?Math.round(m.reduce((a,x)=>a+x.suma,0)/n/3*100)/100:null),
-        criterios:[0,1,2,3,4].map(k=>n?Math.round(m.reduce((a,x)=>a+x.c[k],0)/n*100)/100:null)};}),
+        criterios:[0,1,2,3,4].map(k=>n?Math.round(m.reduce((a,x)=>a+x.c[k],0)/n*100)/100:null),tiempo:s.tiempo==null?null:s.tiempo};}),
     detalle:db.eva.map(x=>Object.assign({},x))});
   const run=f=>new Promise(res=>setTimeout(()=>{try{const o=f();save();res(Object.assign({ok:true},o));}catch(e){res({ok:false,error:String(e)});}},220));
   return{
     get:p=>run(()=>{
-      if(p.action==='init')return{presentadores:db.est.map(pub),actual:db.actual,sesion:db.sesion,inicio:db.inicio,ahora:Date.now(),reglas:{minPorque:15,minEntendio:25}};
-      if(p.action==='estado'){val(p.ru,p.codigo);return{actual:db.actual,sesion:db.sesion,inicio:db.inicio,ahora:Date.now(),
+      if(p.action==='init')return{presentadores:db.est.map(pub),actual:db.actual,sesion:db.sesion,inicio:db.inicio,duro:durAct(),ahora:Date.now(),reglas:{minPorque:15,minEntendio:25}};
+      if(p.action==='estado'){val(p.ru,p.codigo);return{actual:db.actual,sesion:db.sesion,inicio:db.inicio,duro:durAct(),ahora:Date.now(),
         recibidas:db.actual?db.eva.filter(x=>x.id===db.actual).length:0,estados:db.est.map(s=>({id:s.id,estado:s.estado}))};}
       throw'Acción no válida.';}),
     post:b=>run(()=>{
@@ -690,13 +692,14 @@ function crearDemo(){
       if(b.action==='admin'){if(String(b.pin)!==PIN)throw'PIN incorrecto.';const op=b.op;
         if(op==='codigo')db.codigo=String(b.codigo||'').trim().toUpperCase();
         else if(op==='sesion')db.sesion=Number(b.sesion)===2?2:1;
-        else if(op==='actual'){const id=Number(b.id)||0;if(id){const s=db.est.find(x=>x.id===id);if(!s)throw'Expositor no válido.';if(s.estado==='ausente')throw'Ese expositor está marcado como ausente.';s.estado='abierto';}db.actual=id;db.inicio=id?Date.now():0;}
-        else if(op==='reloj')db.inicio=Date.now();
-        else if(op==='estado'){const s=db.est.find(x=>x.id===Number(b.id));if(!s)throw'Expositor no válido.';if(!['pendiente','abierto','cerrado','ausente'].includes(b.estado))throw'Estado no válido.';s.estado=b.estado;if(b.estado!=='abierto'&&db.actual===s.id){db.actual=0;db.inicio=0;}}
-        else if(op==='reiniciar'){const s=db.est.find(x=>x.id===Number(b.id));if(!s)throw'Expositor no válido.';s.estado='pendiente';if(db.actual===s.id){db.actual=0;db.inicio=0;}db.eva=db.eva.filter(x=>x.id!==s.id);}
-        else if(op==='cerrarSesion'){db.est.forEach(s=>{if(s.sesion===Number(b.sesion)&&s.estado==='abierto')s.estado='cerrado';});db.actual=0;db.inicio=0;}
+        else if(op==='actual'){const id=Number(b.id)||0;if(id){const s=db.est.find(x=>x.id===id);if(!s)throw'Expositor no válido.';if(s.estado==='ausente')throw'Ese expositor está marcado como ausente.';s.estado='abierto';}guardarT();db.actual=id;db.inicio=id?Date.now():0;}
+        else if(op==='terminar'){if(!db.actual)throw'No hay nadie en escena.';guardarT();}
+        else if(op==='reloj'){if(!db.actual)throw'No hay nadie en escena.';db.inicio=Date.now();}
+        else if(op==='estado'){const s=db.est.find(x=>x.id===Number(b.id));if(!s)throw'Expositor no válido.';if(!['pendiente','abierto','cerrado','ausente'].includes(b.estado))throw'Estado no válido.';s.estado=b.estado;if(b.estado!=='abierto'&&db.actual===s.id){if(b.estado==='cerrado')guardarT();db.actual=0;db.inicio=0;}}
+        else if(op==='reiniciar'){const s=db.est.find(x=>x.id===Number(b.id));if(!s)throw'Expositor no válido.';s.estado='pendiente';s.tiempo=null;if(db.actual===s.id){db.actual=0;db.inicio=0;}db.eva=db.eva.filter(x=>x.id!==s.id);}
+        else if(op==='cerrarSesion'){guardarT();db.est.forEach(s=>{if(s.sesion===Number(b.sesion)&&s.estado==='abierto')s.estado='cerrado';});db.actual=0;db.inicio=0;}
         else if(op==='reiniciarDemo'){db=base();}
-        else if(op==='limpiarTodo'){if(String(b.confirma||'').toUpperCase()!=='BORRAR')throw'Escribe BORRAR para confirmar.';db.eva=[];db.acc=[];db.est.forEach(s=>s.estado='pendiente');db.actual=0;db.inicio=0;}
+        else if(op==='limpiarTodo'){if(String(b.confirma||'').toUpperCase()!=='BORRAR')throw'Escribe BORRAR para confirmar.';db.eva=[];db.acc=[];db.est.forEach(s=>{s.estado='pendiente';s.tiempo=null;});db.actual=0;db.inicio=0;}
         else if(op!=='panel')throw'Operación no válida.';
         return panel();}
       throw'Acción no válida.';})
@@ -704,9 +707,9 @@ function crearDemo(){
 }
 
 /* ===================== ESTUDIANTE ===================== */
-const E={envios:{},okId:null,yo:null,ru:'',codigo:'',lista:[],mios:new Set(),actual:0,sesion:1,inicio:0,recibidas:0,reglas:{minPorque:15,minEntendio:25},ev:null,paso:0,sondeo:null,borradores:{},filtro:'todos'};
+const E={duro:null,envios:{},okId:null,yo:null,ru:'',codigo:'',lista:[],mios:new Set(),actual:0,sesion:1,inicio:0,recibidas:0,reglas:{minPorque:15,minEntendio:25},ev:null,paso:0,sondeo:null,borradores:{},filtro:'todos'};
 
-async function cargarLista(){const r=await API.get({action:'init'});if(r.ok){E.lista=r.presentadores;E.reglas=r.reglas||E.reglas;E.actual=r.actual;E.sesion=r.sesion;E.inicio=r.inicio||0;}return r;}
+async function cargarLista(){const r=await API.get({action:'init'});if(r.ok){E.lista=r.presentadores;E.reglas=r.reglas||E.reglas;E.actual=r.actual;E.sesion=r.sesion;E.inicio=r.inicio||0;E.duro=r.duro==null?null:r.duro;}return r;}
 // La lista se pide apenas abre la página, mientras el estudiante escribe su RU.
 function precargar(){if(!E.listaP)E.listaP=cargarLista().then(r=>{if(!r.ok)E.listaP=null;return r;});return E.listaP;}
 
@@ -762,7 +765,7 @@ function pintarEscenario(){
       <div class="pulso"><span class="caras"><i></i><i></i><i></i></span><span id="escPulso"></span></div>
       ${propio?'<button class="btn btn-borde" disabled style="opacity:.9">Es de tu grupo: ¡apóyalo!</button>'
         :`<button class="btn ${hecho?'btn-borde':'btn-blanco'}" data-evaluar="${a.id}">${hecho?'Ya lo evaluaste · cambiar mi evaluación':'Evaluar a '+esc(pila(a.nombre))}</button>`}`;
-    pintarReloj($('#escReloj'),E.inicio,false);pintarPulso();
+    pintarReloj($('#escReloj'),E.inicio,false,E.duro);pintarPulso();
   }
   const evs=evaluables(),hechos=evs.filter(s=>E.mios.has(s.id)).length;
   const todo=hechos===evs.length&&evs.length;
@@ -808,7 +811,7 @@ async function sondear(){
   if(!E.yo||document.hidden)return;
   const r=await API.get({action:'estado',ru:E.ru,codigo:E.codigo});
   if(!r.ok){if(!r.red&&/código|RU/.test(r.error)){salir();toast(r.error,true);}return;}
-  const antes=E.actual;E.actual=r.actual;E.sesion=r.sesion||E.sesion;E.inicio=r.inicio||0;E.recibidas=r.recibidas||0;
+  const antes=E.actual;E.actual=r.actual;E.sesion=r.sesion||E.sesion;E.inicio=r.inicio||0;E.duro=r.duro==null?null:r.duro;E.recibidas=r.recibidas||0;
   const m={};r.estados.forEach(x=>m[x.id]=x.estado);E.lista.forEach(s=>{if(m[s.id])s.estado=m[s.id];});
   if(E.actual&&E.actual!==antes){const a=E.lista.find(s=>s.id===E.actual);if(a){toast('🎤 Ahora expone '+corto(a.nombre));try{navigator.vibrate&&navigator.vibrate(120)}catch(x){}}}
   if(!$('#vEscenario').classList.contains('oculto'))pintarEscenario();
@@ -960,13 +963,14 @@ function pintarDocente(){
     $('#docProg').style.width=(esp?Math.min(100,a.n/esp*100):0)+'%';
     $('#docCuantas').innerHTML=`<b>${a.n}</b> de ${esp} evaluaciones esperadas`;
   }else{$('#docActual').innerHTML='<h3>Nadie en escena</h3><p class="ayuda">Toca «Siguiente expositor» para empezar.</p>';$('#docProg').style.width='0';$('#docCuantas').textContent='';}
-  pintarReloj($('#docReloj'),a?c.inicio:0,true);
+  pintarReloj($('#docReloj'),a?c.inicio:0,true,a?a.tiempo:null);
+  $('#btnTerminar').classList.toggle('oculto',!(a&&c.inicio));$('#btnReloj').classList.toggle('oculto',!a);
   const bd=$('#btnDeshacer');bd.classList.toggle('oculto',!a);
   if(a){const arm=D.armado===a.id;bd.textContent=arm?textoArmado(a):'Deshacer: sacar de escena y volver a pendiente';bd.classList.toggle('btn-vino',arm);bd.classList.toggle('btn-borde',!arm);}
   const ses=R.filter(s=>s.sesion===c.sesion);
   $('#ordenInfo').textContent=ses.filter(s=>s.estado==='cerrado'||s.estado==='abierto').length+' de '+ses.length+' pasaron a escena';
   $('#tbOrden').innerHTML=ses.map(s=>`<div class="fila-o ${s.id===c.actual?'actual':''}">
-    <span class="n">${s.id}</span><div class="d"><b>${esc(titulo(s.nombre))}</b><span>G${s.grupo} · ${esc(s.tema)}</span></div>
+    <span class="n">${s.id}</span><div class="d"><b>${esc(titulo(s.nombre))}</b><span>G${s.grupo} · ${s.id===c.actual&&c.inicio?'⏱ exponiendo · ':(s.tiempo!=null?'⏱ '+mmss(s.tiempo)+' · ':'')}${esc(s.tema)}</span></div>
     <div class="nota">${s.estado==='ausente'?'0':(s.nota==null?'<span style="color:var(--plomo-b);font-weight:600">sin nota</span>':fmt(s.nota))}<small>${s.n} eval. · <span class="chip ${s.estado}" style="padding:1px 7px">${ESTADO_TXT[s.estado]}</span></small></div>
     <div class="acciones">
       ${s.estado!=='ausente'&&s.id!==c.actual?`<button class="btn btn-vino btn-mini" data-op="actual" data-id="${s.id}">En escena</button>`:''}
@@ -978,7 +982,7 @@ function pintarDocente(){
   $('#tbRes').innerHTML=lista.map(s=>{const v=s.estado==='ausente'?0:s.nota;const cls=v==null?'':v>=4.5?'alta':v<3?'baja':'';
     return`<div class="res"><span class="n">${s.id}</span><div class="d"><b>${esc(titulo(s.nombre))}</b><span>G${s.grupo} · ${esc(s.tema)}</span></div>
     <div class="bar"><i class="${cls}" style="width:${v==null?0:v/5*100}%"></i></div>
-    <div class="v">${s.estado==='ausente'?'0':(v==null?'—':fmt(v))}<small>${s.estado==='ausente'?'Ausente':s.n+' eval.'}</small></div></div>`;}).join('');
+    <div class="v">${s.estado==='ausente'?'0':(v==null?'—':fmt(v))}<small>${s.estado==='ausente'?'Ausente':s.n+' eval.'+(s.tiempo!=null?' · ⏱ '+mmss(s.tiempo):'')}</small></div></div>`;}).join('');
   const top=lista.filter(s=>s.nota!=null&&s.estado!=='ausente').sort((x,y)=>y.nota-x.nota).slice(0,3);
   const orden=[top[1],top[0],top[2]];
   $('#podio').innerHTML=top.length?orden.map((s,k)=>s?`<div class="p${[2,1,3][k]}"><em>${['🥈','🥇','🥉'][k]}</em><b>${fmt(s.nota)}</b><span>${esc(corto(s.nombre))}</span></div>`:'<span></span>').join(''):'';
@@ -1005,6 +1009,7 @@ $('#btnSiguiente').addEventListener('click',()=>{
   const desde=ses.findIndex(s=>s.id===c.actual);
   const sig=ses.slice(desde+1).find(s=>s.estado==='pendiente')||ses.find(s=>s.estado==='pendiente');
   if(!sig)return toast('Ya expusieron todos los de esta sesión.');
+  const prev=D.p.resultados.find(x=>x.id===c.actual);if(prev&&c.inicio)prev.tiempo=transcurrido(c.inicio);
   c.actual=sig.id;c.inicio=Date.now()+DESFASE;sig.estado='abierto';pintarDocente();toast('🎤 En escena: '+titulo(sig.nombre));
   adm('actual',{id:sig.id});});
 $('#btnBorrar').addEventListener('click',async()=>{
@@ -1012,7 +1017,12 @@ $('#btnBorrar').addEventListener('click',async()=>{
   if(v!=='BORRAR'){$('#inBorrar').focus();return toast('Escribe BORRAR en el recuadro para confirmar.',true);}
   const b=$('#btnBorrar');ocupado(b,'Borrando…');const ok=await adm('limpiarTodo',{confirma:v});libre(b);
   if(ok){$('#inBorrar').value='';toast('🧹 Pruebas borradas: todo quedó en cero.');}});
-$('#btnReloj').addEventListener('click',async()=>{if(!D.p||!D.p.control.actual)return toast('Primero pon a alguien en escena.',true);if(await adm('reloj'))toast('Reloj reiniciado: 5 minutos.');});
+$('#btnReloj').addEventListener('click',async()=>{if(!D.p||!D.p.control.actual)return toast('Primero pon a alguien en escena.',true);if(await adm('reloj'))toast('Cronómetro en 0:00.');});
+$('#btnTerminar').addEventListener('click',async()=>{
+  if(!D.p||!D.p.control.actual||!D.p.control.inicio)return;
+  const c=D.p.control,a=D.p.resultados.find(x=>x.id===c.actual),seg=transcurrido(c.inicio);
+  a.tiempo=seg;c.inicio=0;pintarDocente();
+  if(await adm('terminar')){const r=D.p.resultados.find(x=>x.id===a.id);toast('⏹ '+titulo(a.nombre)+' expuso '+mmss(r&&r.tiempo!=null?r.tiempo:seg)+'.');}});
 $('#btnCerrarSesion').addEventListener('click',async()=>{
   const b=$('#btnCerrarSesion');
   if(!D.armadoCierre){D.armadoCierre=true;b.textContent='Toca otra vez para cerrar';b.classList.add('btn-vino');b.classList.remove('btn-borde');
@@ -1031,7 +1041,7 @@ function pintarProyector(){
   if(a){const esp=esperados(a);$('#pEtiqueta').textContent='🎤 En el escenario · Grupo '+a.grupo;$('#pNombre').textContent=corto(a.nombre);$('#pTema').textContent=a.tema;
     $('#pBarra').style.width=(esp?Math.min(100,a.n/esp*100):0)+'%';$('#pCuantas').textContent=a.n+' de '+esp+' evaluaciones recibidas';}
   else{$('#pEtiqueta').textContent='Prepárate';$('#pNombre').textContent='Esperando al próximo expositor';$('#pTema').textContent='Escanea el código QR y entra con tu RU y el código de la sala.';$('#pBarra').style.width='0';$('#pCuantas').textContent='';}
-  pintarReloj($('#pReloj'),a?c.inicio:0,false);
+  pintarReloj($('#pReloj'),a?c.inicio:0,false,a?a.tiempo:null);
 }
 function cargarScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);});}
 async function dibujarQR(){
@@ -1043,9 +1053,10 @@ async function dibujarQR(){
 
 /* ----- Reloj: se repinta cada segundo ----- */
 setInterval(()=>{
-  if(!$('#vEscenario').classList.contains('oculto')&&E.actual)pintarReloj($('#escReloj'),E.inicio,false);
-  if(D.p&&!$('#vDocente').classList.contains('oculto')){const a=D.p.control.actual;pintarReloj($('#docReloj'),a?D.p.control.inicio:0,true);}
-  if(D.p&&!$('#vProyector').classList.contains('oculto')){const a=D.p.control.actual;pintarReloj($('#pReloj'),a?D.p.control.inicio:0,false);}
+  if(!$('#vEscenario').classList.contains('oculto')&&E.actual&&E.inicio)pintarReloj($('#escReloj'),E.inicio,false,E.duro);
+  if(D.p&&D.p.control.actual&&D.p.control.inicio){
+    if(!$('#vDocente').classList.contains('oculto'))pintarReloj($('#docReloj'),D.p.control.inicio,true);
+    if(!$('#vProyector').classList.contains('oculto'))pintarReloj($('#pReloj'),D.p.control.inicio,false);}
 },1000);
 
 /* ----- Excel ----- */
@@ -1055,7 +1066,8 @@ $('#btnExcel').addEventListener('click',async()=>{
   const notas=R.map(s=>({'N°':s.id,'RU':s.ru,'Estudiante':s.nombre,'Grupo':s.grupo,'Parte':s.parte,'Tema':s.tema,'Sesión':s.sesion,
     'Estado':s.estado==='ausente'?'Ausente':'Presente','Evaluaciones recibidas':s.n,
     'Dominio del tema (1-3)':s.criterios[0],'Momento memorable (1-3)':s.criterios[1],'Caso real de Cobija (1-3)':s.criterios[2],'Claridad y tiempo (1-3)':s.criterios[3],'Responde preguntas (1-3)':s.criterios[4],
-    'NOTA EXPOSICIÓN (sobre 5)':s.estado==='ausente'?0:(s.nota==null?'Sin evaluaciones':s.nota)}));
+    'NOTA EXPOSICIÓN (sobre 5)':s.estado==='ausente'?0:(s.nota==null?'Sin evaluaciones':s.nota),
+    'Tiempo expuesto (min:seg)':s.tiempo==null?'':mmss(s.tiempo)}));
   const det=Dt.map(x=>({'Fecha':x.fecha,'Evaluador':x.evaluador,'Grupo del evaluador':x.grupoEv,'N° expositor':x.id,'Expositor':x.expositor,
     'Dominio':x.c[0],'Momento memorable':x.c[1],'Caso real':x.c[2],'Claridad y tiempo':x.c[3],'Responde preguntas':x.c[4],'Suma (5-15)':x.suma,'Nota /5':x.nota,
     '¿Por qué esta nota?':x.porque,'¿Qué entendió del tema?':x.entendio}));
@@ -1063,7 +1075,7 @@ $('#btnExcel').addEventListener('click',async()=>{
   try{
     if(!window.XLSX)await cargarScript('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js');
     const wb=XLSX.utils.book_new();
-    const h1=XLSX.utils.json_to_sheet(notas);h1['!cols']=[6,10,34,7,7,46,8,10,12,12,12,12,12,12,16].map(w=>({wch:w}));
+    const h1=XLSX.utils.json_to_sheet(notas);h1['!cols']=[6,10,34,7,7,46,8,10,12,12,12,12,12,12,16,14].map(w=>({wch:w}));
     const h2=XLSX.utils.json_to_sheet(det);h2['!cols']=[18,30,10,10,30,9,9,9,9,9,10,8,50,60].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb,h1,'Notas finales');XLSX.utils.book_append_sheet(wb,h2,'Detalle de evaluaciones');
     XLSX.writeFile(wb,nombre+'.xlsx');toast('Excel descargado.');
@@ -1086,7 +1098,7 @@ $('#btnExcel').addEventListener('click',async()=>{
   const s=guarda.get('copa_sesion');
   if(s){E.ru=s.ru;E.codigo=s.codigo;E.yo=s.yo;E.mios=new Set(s.mios||[]);
     const [r,v]=await Promise.all([precargar(),API.get({action:'estado',ru:E.ru,codigo:E.codigo})]);
-    if(r.ok&&v.ok){E.actual=v.actual;E.sesion=v.sesion||E.sesion;E.inicio=v.inicio||0;E.recibidas=v.recibidas||0;return abrirEscenario();}
+    if(r.ok&&v.ok){E.actual=v.actual;E.sesion=v.sesion||E.sesion;E.inicio=v.inicio||0;E.duro=v.duro==null?null:v.duro;E.recibidas=v.recibidas||0;return abrirEscenario();}
     guarda.del('copa_sesion');}
   vista('vIngreso');
 })();
